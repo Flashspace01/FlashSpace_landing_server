@@ -16,7 +16,8 @@ app.use((req, res, next) => {
         'https://vo.flashspace.co', 
         'https://virtual.flashspace.co', 
         'https://flashspace.co',
-        'https://www.flashspace.co'
+        'https://www.flashspace.co',
+        'https://flashspace01-flash-space-google-ads.vercel.app'
     ];
     
     const origin = req.headers.origin;
