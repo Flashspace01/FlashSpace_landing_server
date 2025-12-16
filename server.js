@@ -54,14 +54,29 @@ app.post('/api/send-email', async (req, res) => {
     } = req.body;
 
     console.log('\n📬 New form submission received:');
-    console.log('Name:', name);
-    console.log('Email:', email);
-    console.log('Phone:', phone || 'Not provided');
-    console.log('City:', city || 'Not provided');
-    console.log('Company:', company || 'Not provided');
-    console.log('Message:', `"${message || 'Not provided'}"`, 'Length:', (message || '').length);
-    console.log('UTM Tracking:', utm);
-    console.log('Timestamp:', timestamp);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('👤 Name:', name);
+    console.log('📧 Email:', email);
+    console.log('📱 Phone:', phone || 'Not provided');
+    console.log('🏢 Company:', company || 'Not provided');
+    console.log('📍 City:', city || 'Not provided');
+    console.log('💬 Message:', `"${message || 'Not provided'}"`, 'Length:', (message || '').length);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🎯 UTM TRACKING DATA:');
+    if (utm) {
+        console.log('  🔑 GCLID:', utm.gclid || '❌ NOT PROVIDED');
+        console.log('  📱 Source:', utm.utm_source || '❌ NOT PROVIDED');
+        console.log('  📢 Medium:', utm.utm_medium || '❌ NOT PROVIDED');
+        console.log('  🎪 Campaign:', utm.utm_campaign || '❌ NOT PROVIDED');
+        console.log('  🔍 Term:', utm.utm_term || '❌ NOT PROVIDED');
+        console.log('  📝 Content:', utm.utm_content || '❌ NOT PROVIDED');
+        console.log('  🔙 Referrer:', utm.referrer || 'Direct Visit');
+        console.log('  🌐 Landing Page:', utm.landing_page || 'N/A');
+    } else {
+        console.log('  ⚠️ No UTM data received');
+    }
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('⏰ Timestamp:', timestamp);
 
     // Validation - message is optional
     if (!name || !email) {
