@@ -52,8 +52,23 @@ async function appendToSheet(data) {
         }
 
         // Create auth client from service account
+        let credentials;
+        
+        // Support both Base64 encoded (production) and JSON string (local)
+        if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64) {
+            // Decode from Base64 (for Render/production)
+            const decoded = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64, 'base64').toString('utf8');
+            credentials = JSON.parse(decoded);
+        } else if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+            // Direct JSON parse (for local development)
+            credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+        } else {
+            console.log('⚠️  Google Service Account credentials not found');
+            return { success: false, message: 'Google Service Account not configured' };
+        }
+        
         const auth = new google.auth.GoogleAuth({
-            credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY),
+            credentials: credentials,
             scopes: SCOPES,
         });
 
