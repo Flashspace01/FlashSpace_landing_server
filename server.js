@@ -53,9 +53,7 @@ async function appendToSheet(data) {
 
         // Create auth client from service account
         const auth = new google.auth.GoogleAuth({
-            credentials: process.env.GOOGLE_SERVICE_ACCOUNT_KEY ? 
-                JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY) : 
-                require('./credentials.json'), // Fallback to file
+            credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY),
             scopes: SCOPES,
         });
 
