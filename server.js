@@ -1,6 +1,7 @@
 const express = require('express');
 const { Resend } = require('resend');
 const bodyParser = require('body-parser');
+const { google } = require('googleapis');
 require('dotenv').config();
 
 const app = express();
@@ -36,6 +37,73 @@ app.use((req, res, next) => {
 
 // Initialize Resend
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Initialize Google Sheets
+const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
+
+async function appendToSheet(data) {
+    try {
+        console.log('📊 Attempting to save to Google Sheets...');
+        
+        // Check if Google Sheets is configured
+        if (!process.env.GOOGLE_SHEETS_ID) {
+            console.log('⚠️  Google Sheets not configured (GOOGLE_SHEETS_ID missing)');
+            return { success: false, message: 'Google Sheets not configured' };
+        }
+
+        // Create auth client from service account
+        const auth = new google.auth.GoogleAuth({
+            credentials: process.env.GOOGLE_SERVICE_ACCOUNT_KEY ? 
+                JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY) : 
+                require('./credentials.json'), // Fallback to file
+            scopes: SCOPES,
+        });
+
+        const sheets = google.sheets({ version: 'v4', auth });
+        
+        const timestamp = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+        
+        // Prepare row data
+        const values = [[
+            timestamp,                          // Timestamp
+            data.name || '',                    // Name
+            data.email || '',                   // Email
+            data.phone || '',                   // Phone
+            data.city || '',                    // City
+            data.company || '',                 // Company
+            data.message || '',                 // Message
+            data.utm?.utm_source || '',         // UTM Source
+            data.utm?.utm_medium || '',         // UTM Medium
+            data.utm?.utm_campaign || '',       // UTM Campaign
+            data.utm?.utm_term || '',           // UTM Term
+            data.utm?.utm_content || '',        // UTM Content
+            data.utm?.gclid || '',              // GCLID
+            data.utm?.referrer || '',           // Referrer
+            data.utm?.landing_page || '',       // Landing Page
+            `FS-${Date.now()}`                  // Lead ID
+        ]];
+
+        const resource = {
+            values,
+        };
+
+        const result = await sheets.spreadsheets.values.append({
+            spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+            range: process.env.GOOGLE_SHEET_NAME || 'Sheet1!A:P', // Updated to include all columns
+            valueInputOption: 'RAW',
+            resource,
+        });
+
+        console.log('✅ Data saved to Google Sheets successfully!');
+        console.log(`📝 ${result.data.updates.updatedCells} cells updated`);
+        
+        return { success: true, result: result.data };
+    } catch (error) {
+        console.error('❌ Google Sheets Error:', error.message);
+        console.error('Error details:', error);
+        return { success: false, error: error.message };
+    }
+}
 
 // Email endpoint
 app.post('/api/send-email', async (req, res) => {
@@ -304,13 +372,23 @@ app.post('/api/send-email', async (req, res) => {
 
         console.log('✅ Email sent successfully!');
         console.log('Email ID:', data.id);
+        
+        // Save to Google Sheets
+        const sheetResult = await appendToSheet(req.body);
+        if (sheetResult.success) {
+            console.log('✅ Data also saved to Google Sheets');
+        } else {
+            console.log('⚠️  Email sent but Google Sheets update failed:', sheetResult.message || sheetResult.error);
+        }
+        
         console.log('---\n');
         
         res.json({ 
             success: true, 
             message: 'Email sent successfully! We will contact you soon.',
             emailId: data.id,
-            leadId: `FS-${Date.now()}`
+            leadId: `FS-${Date.now()}`,
+            googleSheets: sheetResult.success
         });
     } catch (error) {
         console.error('❌ Email sending error:');
