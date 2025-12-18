@@ -43,35 +43,56 @@ const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
 async function appendToSheet(data) {
     try {
-        console.log('📊 Attempting to save to Google Sheets...');
+        console.log('📊 Starting Google Sheets save operation...');
+        console.log('📋 Data received:', { name: data.name, email: data.email, city: data.city });
         
         // Check if Google Sheets is configured
         if (!process.env.GOOGLE_SHEETS_ID) {
-            console.log('⚠️  Google Sheets not configured (GOOGLE_SHEETS_ID missing)');
-            return { success: false, message: 'Google Sheets not configured' };
+            console.log('⚠️  GOOGLE_SHEETS_ID environment variable is missing');
+            return { success: false, message: 'Google Sheets not configured (missing GOOGLE_SHEETS_ID)' };
         }
+        
+        console.log('✅ GOOGLE_SHEETS_ID found:', process.env.GOOGLE_SHEETS_ID);
+        console.log('✅ GOOGLE_SHEET_NAME:', process.env.GOOGLE_SHEET_NAME || 'Sheet1!A:P');
 
         // Create auth client from service account
         let credentials;
         
         // Support both Base64 encoded (production) and JSON string (local)
         if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64) {
-            // Decode from Base64 (for Render/production)
-            const decoded = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64, 'base64').toString('utf8');
-            credentials = JSON.parse(decoded);
+            console.log('🔑 Using Base64 encoded credentials (GOOGLE_SERVICE_ACCOUNT_KEY_BASE64)');
+            try {
+                const decoded = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64, 'base64').toString('utf8');
+                credentials = JSON.parse(decoded);
+                console.log('✅ Base64 credentials decoded successfully');
+                console.log('📧 Service account email:', credentials.client_email);
+            } catch (decodeError) {
+                console.error('❌ Failed to decode Base64 credentials:', decodeError.message);
+                return { success: false, message: 'Failed to decode Base64 credentials', error: decodeError.message };
+            }
         } else if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-            // Direct JSON parse (for local development)
-            credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+            console.log('🔑 Using JSON credentials (GOOGLE_SERVICE_ACCOUNT_KEY)');
+            try {
+                credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+                console.log('✅ JSON credentials parsed successfully');
+                console.log('📧 Service account email:', credentials.client_email);
+            } catch (parseError) {
+                console.error('❌ Failed to parse JSON credentials:', parseError.message);
+                return { success: false, message: 'Failed to parse JSON credentials', error: parseError.message };
+            }
         } else {
-            console.log('⚠️  Google Service Account credentials not found');
-            return { success: false, message: 'Google Service Account not configured' };
+            console.log('❌ NO Google Service Account credentials found!');
+            console.log('💡 Need either GOOGLE_SERVICE_ACCOUNT_KEY_BASE64 or GOOGLE_SERVICE_ACCOUNT_KEY');
+            return { success: false, message: 'Google Service Account not configured (no credentials found)' };
         }
         
+        console.log('🔐 Creating Google Auth client...');
         const auth = new google.auth.GoogleAuth({
             credentials: credentials,
             scopes: SCOPES,
         });
 
+        console.log('📊 Initializing Google Sheets API...');
         const sheets = google.sheets({ version: 'v4', auth });
         
         const timestamp = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
@@ -100,21 +121,46 @@ async function appendToSheet(data) {
             values,
         };
 
+        console.log('📝 Appending data to sheet:', process.env.GOOGLE_SHEET_NAME || 'Sheet1!A:P');
+        console.log('📊 Row data:', values[0].slice(0, 5), '...(16 columns total)');
+        
         const result = await sheets.spreadsheets.values.append({
             spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-            range: process.env.GOOGLE_SHEET_NAME || 'Sheet1!A:P', // Updated to include all columns
+            range: process.env.GOOGLE_SHEET_NAME || 'Sheet1!A:P',
             valueInputOption: 'RAW',
             resource,
         });
 
         console.log('✅ Data saved to Google Sheets successfully!');
         console.log(`📝 ${result.data.updates.updatedCells} cells updated`);
+        console.log('📍 Updated range:', result.data.updates.updatedRange);
         
         return { success: true, result: result.data };
     } catch (error) {
-        console.error('❌ Google Sheets Error:', error.message);
-        console.error('Error details:', error);
-        return { success: false, error: error.message };
+        console.error('❌ Google Sheets Error Details:');
+        console.error('   Error name:', error.name);
+        console.error('   Error message:', error.message);
+        console.error('   Error code:', error.code);
+        
+        if (error.response) {
+            console.error('   API Response status:', error.response.status);
+            console.error('   API Response data:', JSON.stringify(error.response.data, null, 2));
+        }
+        
+        if (error.message.includes('Unable to parse range')) {
+            console.error('💡 TIP: Check GOOGLE_SHEET_NAME format. Should be like: "SheetName!A:P"');
+        }
+        
+        if (error.message.includes('Requested entity was not found')) {
+            console.error('💡 TIP: Check if GOOGLE_SHEETS_ID is correct and sheet exists');
+        }
+        
+        if (error.message.includes('does not have permission')) {
+            console.error('💡 TIP: Share the Google Sheet with:', credentials?.client_email || 'service account email');
+        }
+        
+        console.error('   Full error object:', error);
+        return { success: false, error: error.message, details: error.code };
     }
 }
 
@@ -387,11 +433,16 @@ app.post('/api/send-email', async (req, res) => {
         console.log('Email ID:', data.id);
         
         // Save to Google Sheets
+        console.log('🔄 Now attempting to save to Google Sheets...');
         const sheetResult = await appendToSheet(req.body);
+        
         if (sheetResult.success) {
-            console.log('✅ Data also saved to Google Sheets');
+            console.log('✅ SUCCESS: Data saved to Google Sheets');
+            console.log('📊 Cells updated:', sheetResult.result?.updates?.updatedCells || 'N/A');
         } else {
-            console.log('⚠️  Email sent but Google Sheets update failed:', sheetResult.message || sheetResult.error);
+            console.error('❌ FAILED: Google Sheets update failed');
+            console.error('📋 Reason:', sheetResult.message || sheetResult.error || 'Unknown error');
+            console.error('🔍 Full error details:', JSON.stringify(sheetResult, null, 2));
         }
         
         console.log('---\n');
@@ -401,7 +452,8 @@ app.post('/api/send-email', async (req, res) => {
             message: 'Email sent successfully! We will contact you soon.',
             emailId: data.id,
             leadId: `FS-${Date.now()}`,
-            googleSheets: sheetResult.success
+            googleSheets: sheetResult.success,
+            googleSheetsError: sheetResult.success ? null : (sheetResult.message || sheetResult.error)
         });
     } catch (error) {
         console.error('❌ Email sending error:');
